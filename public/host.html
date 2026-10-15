@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Host · Stuff Your Stocking</title>
+  <link rel="stylesheet" href="/css/host.css">
+</head>
+<body>
+  <!-- PIN gate -->
+  <dialog id="login" class="login">
+    <form id="loginForm" method="dialog">
+      <h1>Host controls</h1>
+      <label>PIN <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" required autofocus></label>
+      <p class="error" id="loginError" hidden>Wrong PIN.</p>
+      <button class="btn primary" type="submit">Unlock</button>
+    </form>
+  </dialog>
+
+  <header class="topbar">
+    <h1 id="title">Stuff Your Stocking</h1>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="game" aria-selected="true">Game</button>
+      <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    </nav>
+    <a class="board-link" href="/" target="_blank" rel="noopener">Open board ↗</a>
+    <span class="conn" id="conn" title="Connection"><span class="dot"></span><span id="connText">Connecting…</span></span>
+  </header>
+
+  <!-- ===================== GAME ===================== -->
+  <section id="tab-game" class="tab">
+    <div class="banner" id="banner"></div>
+
+    <div class="game">
+      <div class="cases-wrap">
+        <div class="cases-head">
+          <h2>Cases</h2>
+          <label class="toggle"><input type="checkbox" id="peek"> Show contents</label>
+        </div>
+        <div class="cases" id="cases"></div>
+      </div>
+
+      <aside class="side">
+        <div class="panel" id="offerPanel" hidden>
+          <h2>Banker's offer</h2>
+          <p class="muted">Suggested <strong id="suggested"></strong> · Avg left <span id="ev"></span></p>
+          <label class="offer-input">$ <input id="offerAmount" type="number" min="0" step="100" inputmode="numeric"></label>
+          <div class="row">
+            <button class="btn deal" id="dealBtn">DEAL</button>
+            <button class="btn nodeal" id="noDealBtn">NO DEAL</button>
+          </div>
+        </div>
+
+        <div class="panel" id="finalPanel" hidden>
+          <h2>Final decision</h2>
+          <p id="finalText"></p>
+          <div class="row">
+            <button class="btn primary" id="keepBtn">Keep</button>
+            <button class="btn" id="swapBtn">Swap</button>
+          </div>
+        </div>
+
+        <div class="panel result" id="resultPanel" hidden></div>
+
+        <div class="panel">
+          <h2>Prizes</h2>
+          <ul class="mini-board" id="miniBoard"></ul>
+        </div>
+
+        <div class="panel" id="historyPanel" hidden>
+          <h2>Offers</h2>
+          <ul class="history" id="history"></ul>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="actions">
+      <button class="btn" id="undoBtn">↶ Undo</button>
+      <button class="btn primary" id="newGameBtn">New game</button>
+    </footer>
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section id="tab-settings" class="tab" hidden>
+    <form id="settingsForm" class="settings">
+      <p class="note">Prize and round changes apply when you start the next game. Look and banker changes apply right away.</p>
+
+      <fieldset>
+        <legend>Board</legend>
+        <label>Title <input name="title" maxlength="80" required></label>
+        <label>Prizes <small>one per line, or separated by spaces</small>
+          <textarea name="prizes" rows="8" required></textarea>
+        </label>
+        <p class="muted" id="prizeCount"></p>
+        <div class="grid3">
+          <label>Columns <input name="columns" type="number" min="1" max="8" required></label>
+          <label>Background <input name="background" type="color"></label>
+          <label>Prize color <input name="accent" type="color"></label>
+        </div>
+        <label class="toggle"><input name="snow" type="checkbox"> Falling snow</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Banker</legend>
+        <p class="muted">Offer = average of remaining prizes × a percentage that rises from the first offer to the last.</p>
+        <div class="grid3">
+          <label>First offer % <input name="startPct" type="number" min="1" max="200" required></label>
+          <label>Last offer % <input name="endPct" type="number" min="1" max="200" required></label>
+          <label>Round to $ <input name="roundTo" type="number" min="1" required></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Round presets</legend>
+        <p class="muted">Cases opened each round. The contestant keeps one case; the game always ends on a final two.</p>
+        <div id="presets" class="presets"></div>
+        <button type="button" class="btn small" id="addPreset">+ Add preset</button>
+      </fieldset>
+
+      <div class="row settings-actions">
+        <button type="submit" class="btn primary">Save settings</button>
+        <button type="button" class="btn" id="revertBtn">Discard changes</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn small" id="exportBtn">Export</button>
+        <label class="btn small">Import <input type="file" id="importFile" accept="application/json" hidden></label>
+        <button type="button" class="btn small" id="defaultsBtn">Reset to defaults</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/js/host.js"></script>
+</body>
+</html>
