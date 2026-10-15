@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     3800, 4000, 4200, 4400, 4500, 4800, 5000, 6000, 7500, 10000,
   ],
   columns: 4,
-  theme: { background: '#1a5c32', accent: '#e63c2f', snow: true },
+  theme: { background: '#1a5c32', accent: '#e63c2f', snow: true, lights: true, glints: true },
   // Offer = expected value × a percentage that ramps linearly from startPct
   // (first offer) to endPct (last offer), rounded to the nearest roundTo.
   banker: { startPct: 35, endPct: 95, roundTo: 100 },
@@ -85,6 +85,8 @@ export function normalizeSettings(input) {
       background: HEX.test(t.background) ? t.background : d.theme.background,
       accent: HEX.test(t.accent) ? t.accent : d.theme.accent,
       snow: t.snow === undefined ? d.theme.snow : Boolean(t.snow),
+      lights: t.lights === undefined ? d.theme.lights : Boolean(t.lights),
+      glints: t.glints === undefined ? d.theme.glints : Boolean(t.glints),
     },
     banker: {
       startPct,

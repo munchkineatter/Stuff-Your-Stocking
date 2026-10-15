@@ -22,7 +22,7 @@ The host and the board can be on different devices, for example the host on a ph
 
 ## Settings (host page → Settings tab)
 
-- **Board:** title, prize values (any number from 2 to 100), number of columns, colors, and falling snow on or off.
+- **Board:** title, prize values (any number from 2 to 100), number of columns, colors, and three effects you can switch on or off: falling snow (three depth layers), string lights around the edges, and sparkle glints on the remaining prizes. Eliminated prizes always get a candy-cane strike that draws itself across the value.
 - **Banker:** the offer is the average of the remaining prizes times a percentage. The percentage rises from *First offer %* to *Last offer %* across the game and is rounded to *Round to $*.
 - **Round presets:** saved schedules of how many cases to open each round. The default is `6, 5, 4, 3, 2, 1, 1`. A schedule automatically adapts to however many cases there are and always ends on a final two. Each preset shows a preview, for example *With 20 cases: 6 → 5 → 4 → 3 then final two*.
 - **Export / Import:** back up your settings as a JSON file, or move them to another server.

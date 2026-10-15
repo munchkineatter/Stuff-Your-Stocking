@@ -3,6 +3,7 @@
   --accent: #e63c2f;
   --cols: 4;
   --rows: 5;
+  --edge: 0px; /* room reserved for the string lights; set when they're on */
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,18 +19,98 @@ body {
   cursor: default;
 }
 
-/* ---------- snow ---------- */
-.snow { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+/* ---------- snow: three depth layers ---------- */
+/* Far and mid layers fall behind the prizes; a few big, soft "near" flakes
+   drift in front of them for depth. Each flake is two elements: the outer one
+   falls, the inner one sways, so the motions combine without extra JS. */
+.snow { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.snow.back { z-index: 1; }
+.snow.front { z-index: 20; }
+
 .flake {
   position: absolute;
-  top: -2rem;
-  color: #fff;
-  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  top: -3rem;
   animation: fall linear infinite;
   will-change: transform;
 }
+.flake > span {
+  display: block;
+  color: #fff;
+  animation: sway ease-in-out infinite alternate;
+}
+.flake.far > span  { filter: blur(1px); }
+.flake.near > span { filter: blur(2px); text-shadow: 0 0 10px rgba(255, 255, 255, 0.8); }
+.flake.mid > span  { text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+
 @keyframes fall {
-  to { transform: translateY(calc(100vh + 2rem)) rotate(360deg); }
+  to { transform: translateY(calc(100vh + 6rem)); }
+}
+@keyframes sway {
+  from { transform: translateX(calc(var(--sway) * -1)) rotate(-25deg); }
+  to   { transform: translateX(var(--sway)) rotate(25deg); }
+}
+
+/* ---------- string lights ---------- */
+.lights { position: fixed; inset: 0; pointer-events: none; z-index: 15; }
+.strand { position: absolute; display: flex; justify-content: space-around; align-items: flex-start; }
+/* The wire: a slightly sagging dark curve behind the bulbs. */
+.strand::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 14px;
+  border-bottom: 2px solid #0b2414;
+  border-radius: 0 0 50% 50% / 0 0 100% 100%;
+}
+.strand.top    { top: 0; left: 0; right: 0; height: 40px; }
+.strand.bottom { bottom: 0; left: 0; right: 0; height: 40px; transform: rotate(180deg); }
+/* Sides: vertical strands between the top and bottom ones; the right one is
+   the left one turned around, so its bulbs point inward too. */
+.strand.left, .strand.right { top: 40px; bottom: 40px; width: 40px; flex-direction: column; align-items: flex-start; }
+.strand.left  { left: 0; }
+.strand.right { right: 0; transform: rotate(180deg); }
+.strand.left::before, .strand.right::before {
+  inset: 0 auto 0 0;
+  width: 14px;
+  height: auto;
+  border-bottom: 0;
+  border-right: 2px solid #0b2414;
+  border-radius: 0 50% 50% 0 / 0 100% 100% 0;
+}
+.strand.left .bulb, .strand.right .bulb { margin: 0 0 0 10px; rotate: -90deg; }
+
+.bulb {
+  position: relative;
+  margin-top: 8px;
+  width: 12px;
+  height: 20px;
+  border-radius: 50% 50% 45% 45% / 35% 35% 65% 65%;
+  background: var(--c);
+  animation: twinkle 2.4s ease-in-out infinite;
+  animation-delay: var(--d);
+}
+/* little socket cap */
+.bulb::before {
+  content: '';
+  position: absolute;
+  top: -5px; left: 2px;
+  width: 8px; height: 6px;
+  border-radius: 2px;
+  background: #2a3a2f;
+}
+/* soft glow, animated by opacity only (cheap for the GPU) */
+.bulb::after {
+  content: '';
+  position: absolute;
+  inset: -14px -14px -10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--c) 0%, transparent 65%);
+  opacity: 0.55;
+  animation: inherit;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
 }
 
 /* ---------- board ---------- */
@@ -38,7 +119,7 @@ body {
   z-index: 10;
   display: flex;
   height: 100vh;
-  padding: 3vh 3vw;
+  padding: calc(3vh + var(--edge)) calc(3vw + var(--edge));
   gap: 2vw;
 }
 
@@ -52,7 +133,8 @@ body {
 .col.right { align-items: flex-end; }
 
 .prize {
-  font-size: min(calc(60vh / var(--rows)), calc(85vw / var(--cols) / 3.8), 7rem);
+  position: relative;
+  font-size: min(calc((100vh - 2 * var(--edge)) * 0.6 / var(--rows)), calc((100vw - 2 * var(--edge)) * 0.85 / var(--cols) / 3.8), 7rem);
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0.02em;
@@ -61,30 +143,91 @@ body {
     3px 3px 0 color-mix(in srgb, var(--accent) 45%, black),
     -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff,
     0 0 20px color-mix(in srgb, var(--accent) 30%, transparent);
-  transition: opacity 0.6s ease, transform 0.6s ease, color 0.6s ease;
+  /* Un-eliminating (undo) restores instantly. */
+  transition: color 0.3s ease, text-shadow 0.3s ease, transform 0.4s ease, opacity 0.3s ease;
+}
+
+/* Candy-cane strike: a striped bar that draws itself left to right. */
+.prize::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  left: -4%;
+  right: -4%;
+  top: 46%;
+  height: 0.13em;
+  border-radius: 999px;
+  background: repeating-linear-gradient(-45deg, #e3262b 0 0.12em, #fff 0.12em 0.24em);
+  box-shadow: 0 0 0 2px rgba(120, 0, 0, 0.35), 0 3px 6px rgba(0, 0, 0, 0.4);
+  transform: rotate(-4deg) scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.25s ease-in;
 }
 
 .prize.out {
-  color: #4a4a4a;
-  text-shadow: 2px 2px 0 #2a2a2a, -1px -1px 0 #3a3a3a, 1px -1px 0 #3a3a3a, -1px 1px 0 #3a3a3a;
-  opacity: 0.5;
+  color: #4f5a53;
+  text-shadow: 2px 2px 0 #26302a, -1px -1px 0 #3a443d, 1px -1px 0 #3a443d, -1px 1px 0 #3a443d;
+  opacity: 0.75;
   transform: scale(0.9);
-  text-decoration: line-through 4px #ff0000;
+  /* Pop (knock animation) → strike draws → value fades to gray. */
+  transition: color 0.6s ease 0.9s, text-shadow 0.6s ease 0.9s, opacity 0.6s ease 0.9s, transform 0.6s ease 0.9s;
+}
+.prize.out::before {
+  transform: rotate(-4deg) scaleX(1);
+  transition: transform 0.55s cubic-bezier(0.6, 0, 0.3, 1) 0.3s;
 }
 
 /* Brief pop when a value is knocked out, so the audience sees which one went. */
-.prize.just-out { animation: knock 1.1s ease-out; }
+.prize.just-out { animation: knock 0.9s ease-out; }
 @keyframes knock {
-  0%   { transform: scale(1);    color: #fff; opacity: 1; }
-  25%  { transform: scale(1.25); color: #fff; opacity: 1; }
-  100% { transform: scale(0.9); }
+  0%   { transform: scale(1); }
+  25%  { transform: scale(1.18); color: #fff; }
+  100% { transform: scale(1); }
+}
+
+/* Glint: a light sweep across the letters of a remaining prize. The overlay
+   copies the text (data-text) and clips a moving highlight band to the glyphs. */
+.prize::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  color: transparent;
+  text-shadow: none;
+  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.95) 50%, transparent 65%) no-repeat;
+  background-size: 250% 100%;
+  background-position: 150% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  pointer-events: none;
+}
+.prize.glint::after { animation: sweep 1.1s ease-in-out; }
+@keyframes sweep {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
+
+/* Sparkle star that pops at the end of a glint. */
+.sparkle {
+  position: absolute;
+  z-index: 3;
+  color: #fff;
+  font-size: 0.45em;
+  text-shadow: 0 0 8px #fff, 0 0 16px #ffe9a8;
+  pointer-events: none;
+  animation: sparkle 0.9s ease-out forwards;
+}
+@keyframes sparkle {
+  0%   { transform: scale(0) rotate(0deg); opacity: 0; }
+  40%  { transform: scale(1.2) rotate(90deg); opacity: 1; }
+  100% { transform: scale(0) rotate(180deg); opacity: 0; }
 }
 
 /* ---------- status ---------- */
 .status {
   position: fixed;
-  bottom: 10px;
-  right: 15px;
+  bottom: calc(10px + var(--edge));
+  right: calc(15px + var(--edge));
   z-index: 100;
   display: flex;
   align-items: center;
@@ -99,6 +242,8 @@ body {
 :fullscreen .status:not(.down) { opacity: 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .snow { display: none; }
-  .prize, .prize.just-out { transition: none; animation: none; }
+  .snow, .sparkle { display: none; }
+  .bulb, .bulb::after { animation: none; }
+  .prize, .prize::before, .prize.out, .prize.out::before { transition: none; }
+  .prize.just-out, .prize.glint::after { animation: none; }
 }

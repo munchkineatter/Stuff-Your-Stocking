@@ -215,6 +215,8 @@ function fillSettings(s) {
   form.background.value = s.theme.background;
   form.accent.value = s.theme.accent;
   form.snow.checked = s.theme.snow;
+  form.lights.checked = s.theme.lights;
+  form.glints.checked = s.theme.glints;
   form.startPct.value = s.banker.startPct;
   form.endPct.value = s.banker.endPct;
   form.roundTo.value = s.banker.roundTo;
@@ -270,7 +272,7 @@ function readForm() {
     title: form.title.value,
     prizes: parseNumberList(form.prizes.value),
     columns: form.columns.value,
-    theme: { background: form.background.value, accent: form.accent.value, snow: form.snow.checked },
+    theme: { background: form.background.value, accent: form.accent.value, snow: form.snow.checked, lights: form.lights.checked, glints: form.glints.checked },
     banker: { startPct: form.startPct.value, endPct: form.endPct.value, roundTo: form.roundTo.value },
     presets: presets.map(({ name, schedule }) => ({ name: name.trim(), schedule })),
     activePreset: presets.find((p) => p.active)?.name.trim(),
