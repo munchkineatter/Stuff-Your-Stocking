@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { DEFAULT_SETTINGS, applyAction, boardView, emptyGame, normalizeSettings, refreshOffer } from './public/js/game.js';
+import { MAX_SAVED_GAMES, eventsFor, newLog, record, recordUndo, summarize } from './public/js/log.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -22,7 +23,8 @@ if (!HOST_PIN) console.warn('⚠  HOST_PIN is not set — anyone can control the
 
 // ---------- state + persistence ----------
 
-let state = { settings: normalizeSettings(DEFAULT_SETTINGS), game: emptyGame(), history: [] };
+// log: event log of the current game; games: logs of earlier games (oldest first).
+let state = { settings: normalizeSettings(DEFAULT_SETTINGS), game: emptyGame(), history: [], log: null, games: [], nextGameId: 1 };
 
 try {
   const saved = JSON.parse(await fs.readFile(DATA_FILE, 'utf8'));
@@ -31,6 +33,9 @@ try {
     settings,
     game: upgradeGame({ ...emptyGame(), ...saved.game }, settings),
     history: Array.isArray(saved.history) ? saved.history.slice(-MAX_UNDO) : [],
+    log: saved.log ?? null,
+    games: Array.isArray(saved.games) ? saved.games.slice(-MAX_SAVED_GAMES) : [],
+    nextGameId: Number(saved.nextGameId) || 1,
   };
   console.log(`Loaded saved state from ${DATA_FILE}`);
 } catch (err) {
@@ -119,7 +124,21 @@ const displayView = () => ({
   theme: state.settings.theme,
   board: boardView(state.settings, state.game),
 });
-const hostView = () => ({ t: 'host', settings: state.settings, game: state.game, canUndo: state.history.length > 0 });
+const hostView = () => ({
+  t: 'host',
+  settings: state.settings,
+  game: state.game,
+  canUndo: state.history.length > 0,
+  log: state.log,
+  games: state.games.map(summarize).reverse(), // summaries only; full logs are fetched on demand
+});
+
+const cleanName = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60);
+
+function startLog(contestant) {
+  if (state.log?.events.length) state.games = [...state.games, state.log].slice(-MAX_SAVED_GAMES);
+  state.log = newLog(state.nextGameId++, contestant);
+}
 
 const send = (ws, msg) => ws.readyState === ws.OPEN && ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
 
@@ -136,9 +155,19 @@ function broadcast() {
 function handleHost(ws, msg) {
   switch (msg.t) {
     case 'action': {
-      const next = applyAction(state.game, msg.action, state.settings, secureRandom);
-      // Editing the offer amount isn't a step worth undoing on its own.
-      if (msg.action.type !== 'setOffer') state.history = [...state.history, state.game].slice(-MAX_UNDO);
+      const { action } = msg;
+      const prev = state.game;
+      const next = applyAction(prev, action, state.settings, secureRandom);
+      if (action.type === 'newGame') {
+        // Each game gets its own log, and Undo can't reach back into the previous game.
+        startLog(cleanName(action.contestant));
+        state.history = [];
+      } else if (action.type !== 'setOffer') {
+        // Editing the offer amount isn't a step worth undoing on its own.
+        state.history = [...state.history, prev].slice(-MAX_UNDO);
+      }
+      if (!state.log) startLog(''); // game was already running before logging existed
+      state.log = record(state.log, eventsFor(prev, next, action, state.settings));
       state.game = next;
       break;
     }
@@ -146,6 +175,16 @@ function handleHost(ws, msg) {
       if (!state.history.length) throw new Error('Nothing to undo.');
       state.game = upgradeGame(state.history.at(-1), state.settings);
       state.history = state.history.slice(0, -1);
+      if (state.log) state.log = recordUndo(state.log);
+      break;
+    case 'getLogs': {
+      // Full logs for download: 'all' (every saved game + the current one) or a list of ids.
+      const all = state.log?.events.length ? [...state.games, state.log] : state.games;
+      const logs = msg.ids === 'all' ? all : all.filter((l) => Array.isArray(msg.ids) && msg.ids.includes(l.id));
+      return send(ws, { t: 'logs', logs });
+    }
+    case 'clearLogs':
+      state.games = [];
       break;
     case 'settings':
       state.settings = normalizeSettings(msg.settings);

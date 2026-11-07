@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS, activeSchedule, effectiveSchedule, normalizeSettings,
   othersRemaining, parseNumberList, remainingPrizes,
 } from './game.js';
+import { csvFilename, summarize, toCSV } from './log.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -32,9 +33,19 @@ const send = connect({
         if (!$('login').open) $('login').showModal();
       }
     } else if (msg.t === 'host') {
+      const prevPhase = current?.game.phase;
       current = msg;
       renderGame();
+      renderLog();
       if (!settingsDirty) fillSettings(current.settings);
+      // Game just finished (seen live, not on page load): save its log on this device.
+      if (prevPhase && prevPhase !== 'over' && msg.game.phase === 'over' && msg.log?.events.length) {
+        downloadCSV([msg.log]);
+        toast('Game over: log downloaded as CSV');
+      }
+    } else if (msg.t === 'logs') {
+      if (msg.logs.length) downloadCSV(msg.logs);
+      else toast('No games logged yet.', true);
     } else if (msg.t === 'error') {
       toast(msg.message, true);
     }
@@ -152,7 +163,7 @@ function renderSide(game) {
   const r = game.result;
   $('resultPanel').hidden = !r;
   if (r) {
-    $('resultPanel').innerHTML =
+    $('resultBody').innerHTML =
       r.type === 'deal'
         ? `<h2>Deal!</h2><p class="big">${money(r.amount)}</p><p class="muted">Case ${r.caseNo} held ${money(r.casePrize)} — ${r.casePrize > r.amount ? 'the banker won this one' : 'great deal'}.</p>`
         : `<h2>${r.type === 'swap' ? 'Swapped' : 'Kept'} case ${r.caseNo}</h2><p class="big">${money(r.amount)}</p>`;
@@ -207,9 +218,57 @@ $('keepBtn').addEventListener('click', () => act({ type: 'finalChoice', swap: fa
 $('swapBtn').addEventListener('click', () => act({ type: 'finalChoice', swap: true }));
 $('undoBtn').addEventListener('click', () => send({ t: 'undo' }));
 $('newGameBtn').addEventListener('click', () => {
-  const inProgress = !['idle', 'over'].includes(current?.game.phase);
-  if (inProgress && !confirm('A game is in progress. Start a new one?')) return;
-  act({ type: 'newGame' });
+  $('newGameWarn').hidden = ['idle', 'over'].includes(current?.game.phase);
+  $('contestant').value = '';
+  $('newGameDlg').showModal();
+});
+$('newGameForm').addEventListener('submit', () => act({ type: 'newGame', contestant: $('contestant').value.trim() }));
+$('newGameCancel').addEventListener('click', () => $('newGameDlg').close());
+
+// ---------- game log ----------
+
+function downloadCSV(logs) {
+  // BOM so Excel reads names with accents correctly.
+  const blob = new Blob(['\ufeff', toCSV(logs)], { type: 'text/csv;charset=utf-8' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: csvFilename(logs) });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
+
+function renderLog() {
+  const live = current.log?.events.length ? [{ ...summarize(current.log), live: true }] : [];
+  const rows = [...live, ...current.games];
+  $('logEmpty').hidden = rows.length > 0;
+  $('csvAllBtn').disabled = !rows.length;
+  $('clearLogsBtn').disabled = !current.games.length;
+  $('logRows').replaceChildren(...rows.map((g) => {
+    const tr = document.createElement('tr');
+    const result = g.outcome ? `${g.outcome} · ${money(g.winnings)}` : g.live ? 'In progress' : 'Not finished';
+    for (const text of [g.id, g.contestant || '—', when(g.startedAt), result, g.rows]) {
+      const td = document.createElement('td');
+      td.textContent = text; // contestant names are user text
+      tr.append(td);
+    }
+    const td = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    btn.textContent = '⬇ CSV';
+    btn.addEventListener('click', () => (g.live ? downloadCSV([current.log]) : send({ t: 'getLogs', ids: [g.id] })));
+    td.append(btn);
+    tr.append(td);
+    if (g.live) tr.className = 'live';
+    return tr;
+  }));
+}
+
+$('csvBtn').addEventListener('click', () => current.log?.events.length && downloadCSV([current.log]));
+$('csvAllBtn').addEventListener('click', () => send({ t: 'getLogs', ids: 'all' }));
+$('clearLogsBtn').addEventListener('click', () => {
+  if (confirm(`Delete the ${current.games.length} saved game log(s) from the server? Download them first if you need them. The current game is kept.`)) send({ t: 'clearLogs' });
 });
 
 // Keyboard: U = undo (handy on a laptop during the show)

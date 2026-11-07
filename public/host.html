@@ -18,10 +18,26 @@
     </form>
   </dialog>
 
+  <!-- New game -->
+  <dialog id="newGameDlg" class="login">
+    <form id="newGameForm" method="dialog">
+      <h1>New game</h1>
+      <p class="error" id="newGameWarn" hidden>A game is in progress. Starting a new one ends it; its log is kept.</p>
+      <label>Contestant name <small>optional, used in the game log</small>
+        <input id="contestant" maxlength="60" autocomplete="off" placeholder="e.g. Jamie">
+      </label>
+      <div class="row">
+        <button class="btn primary" type="submit" value="start">Shuffle &amp; start</button>
+        <button class="btn" type="button" id="newGameCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
   <header class="topbar">
     <h1 id="title">Stuff Your Stocking</h1>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="game" aria-selected="true">Game</button>
+      <button role="tab" data-tab="log" aria-selected="false">Log</button>
       <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
     </nav>
     <a class="board-link" href="/" target="_blank" rel="noopener">Open board ↗</a>
@@ -62,7 +78,10 @@
           </div>
         </div>
 
-        <div class="panel result" id="resultPanel" hidden></div>
+        <div class="panel result" id="resultPanel" hidden>
+          <div id="resultBody"></div>
+          <button class="btn small" id="csvBtn" type="button">⬇ Download game log (CSV)</button>
+        </div>
 
         <div class="panel">
           <h2>Prizes</h2>
@@ -83,6 +102,25 @@
   </section>
 
   <!-- ===================== SETTINGS ===================== -->
+  <!-- ===================== LOG ===================== -->
+  <section id="tab-log" class="tab" hidden>
+    <div class="log-wrap">
+      <p class="note">Every step of every game is logged: cases picked and opened, each banker offer (all variations and which one was made), Deal / No Deal, the final choice and the result. Undone steps stay in the log, marked <b>undone</b>. When a game ends, its CSV downloads automatically on this device.</p>
+      <div class="row">
+        <button class="btn primary" id="csvAllBtn" type="button">⬇ Download all games (CSV)</button>
+        <span class="spacer"></span>
+        <button class="btn small danger" id="clearLogsBtn" type="button">Clear saved games</button>
+      </div>
+      <div class="panel">
+        <table class="log-table">
+          <thead><tr><th>#</th><th>Contestant</th><th>Started</th><th>Result</th><th>Rows</th><th></th></tr></thead>
+          <tbody id="logRows"></tbody>
+        </table>
+        <p class="muted" id="logEmpty" hidden>No games logged yet.</p>
+      </div>
+    </div>
+  </section>
+
   <section id="tab-settings" class="tab" hidden>
     <form id="settingsForm" class="settings">
       <p class="note">Prize and round changes apply when you start the next game. Look and banker changes apply right away.</p>

@@ -13,12 +13,23 @@ The host and the board can be on different devices, for example the host on a ph
 
 1. Open `/` on the display machine. Double-click the board or press **F** to go fullscreen.
 2. Open `/host` on the host device and enter the PIN.
-3. Press **New game**. The cases are shuffled using a cryptographically secure random number generator.
+3. Press **New game** and, if you like, type the contestant's name for the game log. The cases are shuffled using a cryptographically secure random number generator.
 4. Tap the contestant's case, then tap the cases they choose to open. The banner tells you how many are left this round.
 5. When the round ends, the banker panel shows one amount for each offer variation, for example Lowball, Fair and Generous, with the default already selected. Tap a different one or type your own amount, then press **DEAL** or **NO DEAL**. The offer history records which variation was made, or "custom".
 6. With two cases left, choose **Keep** or **Swap**.
 
 **Undo** (or the **U** key) reverses the last step, which helps after a mis-tap. **Show contents** reveals every case to the host only. The audience board never receives which case holds which prize, so it can't leak through the display's browser.
+
+## Game log (host page → Log tab)
+
+Every step is logged with a timestamp: the case picked, each case opened and its prize, each banker offer (the amount for every variation, which one was pre-selected, and which one was actually made or a custom figure), Deal / No Deal, the final keep or swap, and the result, including what the contestant's own case held.
+
+- **When a game ends, its CSV downloads automatically** on the host device that's open at the time. If more than one host device is open, each one downloads a copy.
+- If you press **Undo**, the undone rows stay in the log with `undone = yes`, followed by an `undo` row saying what was reversed.
+- The **Log** tab lists every game kept on the server, with a CSV download for each and **Download all games** as one CSV. It keeps the last 200 games, and **Clear saved games** deletes them.
+- In the CSV, each offer variation gets its own column (`offer_Lowball`, `offer_Fair`, …), so offers are easy to chart. Times are in the host device's local time. Contestant names are escaped so spreadsheet apps can't run them as formulas.
+
+Starting a new game ends the current one, and its log is kept even if it wasn't finished. Undo can't reach back into a previous game.
 
 ## Settings (host page → Settings tab)
 
@@ -51,6 +62,7 @@ Any always-on Node 20+ host works (Render, Railway, Fly.io, a VPS). On Render, `
 
 ```
 public/js/game.js    shared game rules (pure functions), used by both the server and the host page
+public/js/log.js     game log: event rows per action, undo marking, CSV export
 server.js            static files + WebSocket at /ws; owns the game state and saves it to disk
 public/index.html    audience board   (js/display.js, css/display.css)
 public/host.html     host controls    (js/host.js,    css/host.css)
