@@ -9,9 +9,18 @@ export const DEFAULT_SETTINGS = Object.freeze({
   ],
   columns: 4,
   theme: { background: '#1a5c32', accent: '#e63c2f', snow: true, lights: true, glints: true },
-  // Offer = expected value × a percentage that ramps linearly from startPct
-  // (first offer) to endPct (last offer), rounded to the nearest roundTo.
-  banker: { startPct: 35, endPct: 95, roundTo: 100 },
+  // The host sees one amount per offer variation and picks one. Each amount =
+  // average of the remaining prizes × a percentage that ramps linearly from
+  // startPct (first offer) to endPct (last offer), rounded to the nearest roundTo.
+  banker: {
+    offers: [
+      { name: 'Lowball', startPct: 25, endPct: 70 },
+      { name: 'Fair', startPct: 35, endPct: 95 },
+      { name: 'Generous', startPct: 50, endPct: 110 },
+    ],
+    defaultOffer: 'Fair',
+    roundTo: 100,
+  },
   presets: [{ name: 'Standard', schedule: [6, 5, 4, 3, 2, 1, 1] }],
   activePreset: 'Standard',
 });
@@ -28,8 +37,8 @@ export function emptyGame() {
     round: 0,
     toOpen: 0,        // cases to open this round
     openedThisRound: 0,
-    offer: null,      // { suggested, amount } while phase === 'offer'
-    offers: [],       // history: { round, amount, accepted }
+    offer: null,      // { options: [{ name, pct, amount }], choice, amount } while phase === 'offer'
+    offers: [],       // history: { round, amount, choice, accepted }
     result: null,     // { type: 'deal'|'keep'|'swap', amount, caseNo, casePrize }
   };
 }
@@ -76,7 +85,22 @@ export function normalizeSettings(input) {
 
   const t = s.theme || {};
   const b = s.banker || {};
-  const startPct = clampInt(b.startPct, 1, 200, d.banker.startPct);
+  // Settings saved before offer variations existed have no `offers`; they get the defaults.
+  const offersIn = Array.isArray(b.offers) && b.offers.length ? b.offers : d.banker.offers;
+  const offers = [];
+  for (const o of offersIn.slice(0, 12)) {
+    const name = String(o?.name ?? '').trim().slice(0, 30);
+    if (!name) throw new Error('Every banker offer needs a name.');
+    if (offers.some((q) => q.name === name)) throw new Error(`Duplicate banker offer name "${name}".`);
+    const startPct = Number(o.startPct);
+    const endPct = Number(o.endPct);
+    for (const v of [startPct, endPct]) {
+      if (!Number.isFinite(v) || v < 1 || v > 300) throw new Error(`"${name}" percentages must be between 1 and 300.`);
+    }
+    offers.push({ name, startPct: Math.round(startPct), endPct: Math.round(endPct) });
+  }
+  const named = (n) => offers.some((o) => o.name === n);
+  const defaultOffer = named(b.defaultOffer) ? b.defaultOffer : named(d.banker.defaultOffer) ? d.banker.defaultOffer : offers[0].name;
   return {
     title: String(s.title ?? d.title).trim().slice(0, 80) || d.title,
     prizes: prizes.sort((a, z) => a - z),
@@ -88,11 +112,7 @@ export function normalizeSettings(input) {
       lights: t.lights === undefined ? d.theme.lights : Boolean(t.lights),
       glints: t.glints === undefined ? d.theme.glints : Boolean(t.glints),
     },
-    banker: {
-      startPct,
-      endPct: clampInt(b.endPct, startPct, 200, Math.max(startPct, d.banker.endPct)),
-      roundTo: clampInt(b.roundTo, 1, 100000, d.banker.roundTo),
-    },
+    banker: { offers, defaultOffer, roundTo: clampInt(b.roundTo, 1, 100000, d.banker.roundTo) },
     presets,
     activePreset,
   };
@@ -137,15 +157,40 @@ export function remainingPrizes(game) {
   return game.cases.filter((_, i) => !opened.has(i + 1));
 }
 
-export function suggestOffer(game, banker) {
-  const left = remainingPrizes(game);
-  if (!left.length) return 0;
-  const ev = left.reduce((a, b) => a + b, 0) / left.length;
+// How far through the offers this round is: 0 at the first offer, 1 at the last.
+function offerProgress(game) {
   const rounds = totalRounds(game.schedule, game.cases.length);
-  const t = rounds > 1 ? (game.round - 1) / (rounds - 1) : 1;
-  const pct = banker.startPct + (banker.endPct - banker.startPct) * Math.min(1, Math.max(0, t));
+  return rounds > 1 ? Math.min(1, Math.max(0, (game.round - 1) / (rounds - 1))) : 1;
+}
+
+// One amount per offer variation for the current round, plus the % used.
+export function offerOptions(game, banker) {
+  const left = remainingPrizes(game);
+  const ev = left.length ? left.reduce((a, b) => a + b, 0) / left.length : 0;
+  const t = offerProgress(game);
   const step = banker.roundTo || 1;
-  return Math.max(0, Math.round((ev * pct) / 100 / step) * step);
+  return banker.offers.map(({ name, startPct, endPct }) => {
+    const pct = Math.round(startPct + (endPct - startPct) * t);
+    return { name, pct, amount: Math.max(0, Math.round((ev * pct) / 100 / step) * step) };
+  });
+}
+
+// Fresh offer state with the default variation selected.
+function openOffer(game, banker) {
+  const options = offerOptions(game, banker);
+  const chosen = options.find((o) => o.name === banker.defaultOffer) || options[0];
+  return { options, choice: chosen.name, amount: chosen.amount };
+}
+
+// Recalculate the amounts if banker settings change while an offer is up,
+// keeping the host's selection (or their custom amount).
+export function refreshOffer(game, banker) {
+  if (game.phase !== 'offer') return game;
+  const options = offerOptions(game, banker);
+  const kept = options.find((o) => o.name === game.offer.choice);
+  if (kept) return { ...game, offer: { options, choice: kept.name, amount: kept.amount } };
+  if (game.offer.choice === null) return { ...game, offer: { ...game.offer, options } };
+  return { ...game, offer: openOffer(game, banker) };
 }
 
 // Audience-safe board: every prize, sorted, with an eliminated flag.
@@ -212,15 +257,23 @@ export function applyAction(game, action, settings, random = Math.random) {
       if (game.opened.includes(c)) throw new Error(`Case ${c} is already open.`);
       const next = { ...game, opened: [...game.opened, c], openedThisRound: game.openedThisRound + 1 };
       if (next.openedThisRound < next.toOpen) return next;
-      const suggested = suggestOffer(next, settings.banker);
-      return { ...next, phase: 'offer', offer: { suggested, amount: suggested } };
+      return { ...next, phase: 'offer', offer: openOffer(next, settings.banker) };
     }
 
+    // Either { choice: 'Fair' } to pick a variation, or { amount } for a custom figure.
     case 'setOffer': {
       expectPhase(game, 'offer');
+      if (action.choice !== undefined) {
+        const opt = game.offer.options.find((o) => o.name === action.choice);
+        if (!opt) throw new Error('No such offer.');
+        return { ...game, offer: { ...game.offer, choice: opt.name, amount: opt.amount } };
+      }
       const amount = Math.round(Number(action.amount));
       if (!Number.isFinite(amount) || amount < 0) throw new Error('Offer must be a non-negative number.');
-      return { ...game, offer: { ...game.offer, amount } };
+      // A typed amount that matches a variation counts as picking it.
+      const match = game.offer.options.find((o) => o.amount === amount && o.name === game.offer.choice)
+        || game.offer.options.find((o) => o.amount === amount);
+      return { ...game, offer: { ...game.offer, choice: match ? match.name : null, amount } };
     }
 
     case 'deal': {
@@ -228,7 +281,7 @@ export function applyAction(game, action, settings, random = Math.random) {
       return {
         ...game,
         phase: 'over',
-        offers: [...game.offers, { round: game.round, amount: game.offer.amount, accepted: true }],
+        offers: [...game.offers, { round: game.round, amount: game.offer.amount, choice: game.offer.choice, accepted: true }],
         result: { type: 'deal', amount: game.offer.amount, caseNo: game.playerCase, casePrize: game.cases[game.playerCase - 1] },
         offer: null,
       };
@@ -236,7 +289,7 @@ export function applyAction(game, action, settings, random = Math.random) {
 
     case 'noDeal': {
       expectPhase(game, 'offer');
-      const next = { ...game, offers: [...game.offers, { round: game.round, amount: game.offer.amount, accepted: false }], offer: null };
+      const next = { ...game, offers: [...game.offers, { round: game.round, amount: game.offer.amount, choice: game.offer.choice, accepted: false }], offer: null };
       return othersRemaining(next) <= 1 ? { ...next, phase: 'final' } : startRound(next, game.round + 1);
     }
 

@@ -87,12 +87,6 @@ small { color: var(--muted); font-weight: normal; }
 
 /* ---------- game layout ---------- */
 .game { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; align-items: start; }
-@media (max-width: 900px) {
-  .game { grid-template-columns: 1fr; }
-  /* On phones, put the decision panels above the cases so DEAL / NO DEAL is never off-screen. */
-  .side { display: contents; }
-  #offerPanel, #finalPanel, #resultPanel { order: -1; }
-}
 
 .cases-wrap, .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
 .cases-head { display: flex; justify-content: space-between; align-items: baseline; }
@@ -127,12 +121,37 @@ small { color: var(--muted); font-weight: normal; }
 
 .side { display: flex; flex-direction: column; gap: 1rem; }
 
+/* Must come after the .side rule above, or that rule wins and nothing moves. */
+@media (max-width: 900px) {
+  .game { grid-template-columns: minmax(0, 1fr); }
+  /* On phones, put the decision panels above the cases so DEAL / NO DEAL is never off-screen. */
+  .side { display: contents; }
+  #offerPanel, #finalPanel, #resultPanel { order: -1; }
+}
+
 #offerPanel { border-color: var(--gold); }
 .offer-input { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-size: 2rem; font-weight: 800; margin: 0.6rem 0 0.9rem; }
 .offer-input input {
   flex: 1; min-width: 0; font: inherit; color: var(--gold);
   background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.2rem 0.6rem;
 }
+.offer-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 0.5rem; margin-top: 0.7rem; }
+.offer-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  min-height: 72px; padding: 0.5rem 0.3rem;
+  border: 2px solid var(--border); border-radius: 10px;
+  background: var(--bg); color: var(--text); cursor: pointer;
+  font: inherit;
+}
+.offer-opt:hover { border-color: var(--muted); }
+.offer-opt .oname { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.offer-opt .oamt { font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.offer-opt .opct { font-size: 0.7rem; color: var(--muted); }
+.offer-opt[aria-checked='true'] { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--bg)); }
+.offer-opt[aria-checked='true'] .oname, .offer-opt[aria-checked='true'] .oamt { color: var(--gold); }
+/* Typed a figure that isn't one of the variations: mark the box as the active choice instead. */
+.offer-input input.custom { border-color: var(--gold); }
+
 .btn.deal, .btn.nodeal { flex: 1; min-height: 64px; font-size: 1.3rem; letter-spacing: 0.04em; }
 .btn.deal { background: var(--green); border-color: var(--green); }
 .btn.nodeal { background: var(--accent); border-color: var(--accent); }
@@ -171,6 +190,14 @@ input[type='color'] { padding: 0.2rem; height: 44px; width: 100%; }
 input[type='checkbox'], input[type='radio'] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
 @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr; } }
+
+.bank-offers { display: flex; flex-direction: column; gap: 0.5rem; }
+.bank-offer { display: grid; grid-template-columns: 4.2rem 1fr 5.5rem 5.5rem 2.6rem; gap: 0.5rem; align-items: center; }
+.bank-offer.head { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.bank-offer .radio { justify-content: center; }
+label.inline { flex-direction: row; align-items: center; gap: 0.5rem; }
+label.inline input { width: 7rem; }
+@media (max-width: 560px) { .bank-offer { grid-template-columns: 2.4rem 1fr 4.2rem 4.2rem 2.4rem; } .bank-offer.head span:first-child { font-size: 0; } }
 
 .presets { display: flex; flex-direction: column; gap: 0.6rem; }
 .preset { display: grid; grid-template-columns: auto 1fr 2fr auto; gap: 0.5rem; align-items: center; }

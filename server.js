@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { DEFAULT_SETTINGS, applyAction, boardView, emptyGame, normalizeSettings } from './public/js/game.js';
+import { DEFAULT_SETTINGS, applyAction, boardView, emptyGame, normalizeSettings, refreshOffer } from './public/js/game.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -14,6 +14,10 @@ const DATA_FILE = path.join(process.env.DATA_DIR || path.join(ROOT, 'data'), 'st
 const MAX_UNDO = 100;
 const secureRandom = () => crypto.randomInt(2 ** 32) / 2 ** 32;
 
+// A game saved by an older version mid-offer has no offer variations; recalculate them.
+const upgradeGame = (game, settings) =>
+  game.phase === 'offer' && !game.offer?.options ? refreshOffer(game, settings.banker) : game;
+
 if (!HOST_PIN) console.warn('⚠  HOST_PIN is not set — anyone can control the game. Set it before going live.');
 
 // ---------- state + persistence ----------
@@ -22,9 +26,10 @@ let state = { settings: normalizeSettings(DEFAULT_SETTINGS), game: emptyGame(), 
 
 try {
   const saved = JSON.parse(await fs.readFile(DATA_FILE, 'utf8'));
+  const settings = normalizeSettings(saved.settings);
   state = {
-    settings: normalizeSettings(saved.settings),
-    game: { ...emptyGame(), ...saved.game },
+    settings,
+    game: upgradeGame({ ...emptyGame(), ...saved.game }, settings),
     history: Array.isArray(saved.history) ? saved.history.slice(-MAX_UNDO) : [],
   };
   console.log(`Loaded saved state from ${DATA_FILE}`);
@@ -139,11 +144,12 @@ function handleHost(ws, msg) {
     }
     case 'undo':
       if (!state.history.length) throw new Error('Nothing to undo.');
-      state.game = state.history.at(-1);
+      state.game = upgradeGame(state.history.at(-1), state.settings);
       state.history = state.history.slice(0, -1);
       break;
     case 'settings':
       state.settings = normalizeSettings(msg.settings);
+      state.game = refreshOffer(state.game, state.settings.banker);
       break;
     default:
       throw new Error('Unknown message.');

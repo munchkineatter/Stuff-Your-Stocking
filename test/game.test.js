@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_SETTINGS, applyAction, boardView, effectiveSchedule, emptyGame,
-  normalizeSettings, parseNumberList, remainingPrizes, suggestOffer,
+  normalizeSettings, offerOptions, parseNumberList, refreshOffer, remainingPrizes,
 } from '../public/js/game.js';
 
 const settings = normalizeSettings(DEFAULT_SETTINGS);
@@ -33,7 +33,9 @@ test('full game: no deal through to a swap', () => {
     assert.equal(g.toOpen, expected);
     for (let i = 0; i < expected; i++) g = openNext(g);
     assert.equal(g.phase, 'offer');
-    assert.ok(g.offer.suggested > 0);
+    assert.equal(g.offer.options.length, 3);
+    assert.equal(g.offer.choice, 'Fair');
+    assert.ok(g.offer.amount > 0);
     g = applyAction(g, { type: 'noDeal' }, settings);
   }
   assert.equal(g.phase, 'final');
@@ -64,15 +66,51 @@ test('illegal moves are rejected', () => {
   assert.throws(() => applyAction(g2, { type: 'openCase', caseNo: g2.opened[0] }, settings), /already open/);
 });
 
-test('banker offer ramps from start % to end % of the average', () => {
-  const s = normalizeSettings({ ...DEFAULT_SETTINGS, prizes: [100, 200, 300, 400], banker: { startPct: 50, endPct: 100, roundTo: 1 }, presets: [{ name: 'x', schedule: [1] }] });
+const rampBanker = {
+  offers: [{ name: 'Low', startPct: 50, endPct: 100 }, { name: 'High', startPct: 100, endPct: 150 }],
+  defaultOffer: 'High',
+  roundTo: 1,
+};
+
+test('each offer variation ramps from its first % to its last % of the average', () => {
+  const s = normalizeSettings({ ...DEFAULT_SETTINGS, prizes: [100, 200, 300, 400], banker: rampBanker, presets: [{ name: 'x', schedule: [1] }] });
   let g = play([{ type: 'newGame' }, { type: 'pickCase', caseNo: 4 }], s);
   g = applyAction(g, { type: 'openCase', caseNo: 1 }, s); // removes 100 → avg 300
-  assert.equal(g.offer.suggested, 150); // round 1 of 2 → 50%
+  assert.deepEqual(g.offer.options, [{ name: 'Low', pct: 50, amount: 150 }, { name: 'High', pct: 100, amount: 300 }]);
+  assert.equal(g.offer.choice, 'High'); // the default is pre-selected
+  assert.equal(g.offer.amount, 300);
   g = applyAction(g, { type: 'noDeal' }, s);
   g = applyAction(g, { type: 'openCase', caseNo: 2 }, s); // removes 200 → avg 350
-  assert.equal(g.offer.suggested, 350); // last round → 100%
-  assert.equal(suggestOffer(g, s.banker), 350);
+  assert.deepEqual(offerOptions(g, s.banker).map((o) => o.amount), [350, 525]); // last round → end %
+});
+
+test('host can pick a variation or type a custom amount', () => {
+  const s = normalizeSettings({ ...DEFAULT_SETTINGS, prizes: [100, 200, 300, 400], banker: rampBanker, presets: [{ name: 'x', schedule: [1] }] });
+  let g = play([{ type: 'newGame' }, { type: 'pickCase', caseNo: 4 }], s);
+  g = applyAction(g, { type: 'openCase', caseNo: 1 }, s);
+  g = applyAction(g, { type: 'setOffer', choice: 'Low' }, s);
+  assert.deepEqual([g.offer.choice, g.offer.amount], ['Low', 150]);
+  g = applyAction(g, { type: 'setOffer', amount: 222 }, s);
+  assert.deepEqual([g.offer.choice, g.offer.amount], [null, 222]);
+  g = applyAction(g, { type: 'setOffer', amount: 300 }, s); // typed amount equal to a variation selects it
+  assert.equal(g.offer.choice, 'High');
+  assert.throws(() => applyAction(g, { type: 'setOffer', choice: 'Nope' }, s), /No such offer/);
+  g = applyAction(g, { type: 'setOffer', choice: 'Low' }, s);
+  g = applyAction(g, { type: 'deal' }, s);
+  assert.deepEqual(g.offers, [{ round: 1, amount: 150, choice: 'Low', accepted: true }]);
+});
+
+test('changing banker settings mid-offer recalculates but keeps the selection', () => {
+  const s = normalizeSettings({ ...DEFAULT_SETTINGS, prizes: [100, 200, 300, 400], banker: rampBanker, presets: [{ name: 'x', schedule: [1] }] });
+  let g = play([{ type: 'newGame' }, { type: 'pickCase', caseNo: 4 }], s);
+  g = applyAction(g, { type: 'openCase', caseNo: 1 }, s);
+  g = applyAction(g, { type: 'setOffer', choice: 'Low' }, s);
+  const s2 = normalizeSettings({ ...s, banker: { ...rampBanker, offers: [{ name: 'Low', startPct: 10, endPct: 20 }, rampBanker.offers[1]] } });
+  const g2 = refreshOffer(g, s2.banker);
+  assert.deepEqual([g2.offer.choice, g2.offer.amount], ['Low', 30]);
+  // A game saved by the old version (no options) gets fresh variations with the default selected.
+  const old = refreshOffer({ ...g, offer: { suggested: 100, amount: 100 } }, s.banker);
+  assert.deepEqual([old.offer.choice, old.offer.amount], ['High', 300]);
 });
 
 test('board view handles duplicate prize values and hides case positions', () => {
@@ -94,4 +132,11 @@ test('settings validation', () => {
   assert.deepEqual(s.prizes, [1, 2, 3]);
   assert.equal(s.theme.background, DEFAULT_SETTINGS.theme.background);
   assert.equal(s.activePreset, 'Standard');
+  // Settings saved before offer variations existed get the default three.
+  const old = normalizeSettings({ banker: { startPct: 40, endPct: 90, roundTo: 50 } });
+  assert.deepEqual(old.banker.offers.map((o) => o.name), ['Lowball', 'Fair', 'Generous']);
+  assert.equal(old.banker.defaultOffer, 'Fair');
+  assert.equal(old.banker.roundTo, 50);
+  assert.throws(() => normalizeSettings({ banker: { offers: [{ name: 'A', startPct: 0, endPct: 50 }] } }), /between 1 and 300/);
+  assert.throws(() => normalizeSettings({ banker: { offers: [{ name: 'A', startPct: 5, endPct: 50 }, { name: 'A', startPct: 5, endPct: 50 }] } }), /Duplicate banker/);
 });

@@ -123,11 +123,22 @@ function renderSide(game) {
   $('offerPanel').hidden = game.phase !== 'offer';
   if (game.phase === 'offer') {
     const left = remainingPrizes(game);
-    $('suggested').textContent = money(game.offer.suggested);
     $('ev').textContent = money(left.reduce((a, b) => a + b, 0) / left.length);
+    $('offerOptions').replaceChildren(...game.offer.options.map((o) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'offer-opt';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', o.name === game.offer.choice);
+      btn.dataset.name = o.name;
+      btn.innerHTML = `<span class="oname"></span><span class="oamt">${money(o.amount)}</span><span class="opct">${o.pct}% of avg</span>`;
+      btn.querySelector('.oname').textContent = o.name; // names are user text: never via innerHTML
+      return btn;
+    }));
     const input = $('offerAmount');
     if (document.activeElement !== input) input.value = game.offer.amount;
     input.step = settings.banker.roundTo;
+    input.classList.toggle('custom', game.offer.choice === null);
   }
 
   // Final two
@@ -165,7 +176,8 @@ function renderSide(game) {
   $('historyPanel').hidden = !game.offers.length;
   $('history').replaceChildren(...game.offers.map((o) => {
     const li = document.createElement('li');
-    li.textContent = `Round ${o.round}: ${money(o.amount)}${o.accepted ? ' ✔ accepted' : ''}`;
+    const kind = o.choice === undefined ? '' : ` (${o.choice ?? 'custom'})`;
+    li.textContent = `Round ${o.round}: ${money(o.amount)}${kind}${o.accepted ? ' ✔ accepted' : ''}`;
     return li;
   }));
 }
@@ -179,6 +191,10 @@ $('cases').addEventListener('click', (e) => {
   act({ type: current.game.phase === 'pick' ? 'pickCase' : 'openCase', caseNo });
 });
 
+$('offerOptions').addEventListener('click', (e) => {
+  const btn = e.target.closest('.offer-opt');
+  if (btn) act({ type: 'setOffer', choice: btn.dataset.name });
+});
 $('offerAmount').addEventListener('change', (e) => act({ type: 'setOffer', amount: e.target.value }));
 $('dealBtn').addEventListener('click', () => {
   // Apply an edited-but-not-yet-blurred offer first.
@@ -207,6 +223,7 @@ document.addEventListener('keydown', (e) => {
 const form = $('settingsForm');
 let settingsDirty = false;
 let presets = [];
+let bankOffers = [];
 
 function fillSettings(s) {
   form.title.value = s.title;
@@ -217,9 +234,9 @@ function fillSettings(s) {
   form.snow.checked = s.theme.snow;
   form.lights.checked = s.theme.lights;
   form.glints.checked = s.theme.glints;
-  form.startPct.value = s.banker.startPct;
-  form.endPct.value = s.banker.endPct;
   form.roundTo.value = s.banker.roundTo;
+  bankOffers = s.banker.offers.map((o) => ({ ...o, isDefault: o.name === s.banker.defaultOffer }));
+  renderBankOffers();
   presets = s.presets.map((p) => ({ ...p, active: p.name === s.activePreset }));
   renderPresets();
   updatePrizeCount();
@@ -255,6 +272,45 @@ function renderPresets() {
   }));
 }
 
+function renderBankOffers() {
+  const head = document.createElement('div');
+  head.className = 'bank-offer head';
+  head.innerHTML = '<span>Default</span><span>Name</span><span>First %</span><span>Last %</span><span></span>';
+  $('bankOffers').replaceChildren(head, ...bankOffers.map((o, i) => {
+    const row = document.createElement('div');
+    row.className = 'bank-offer';
+    row.innerHTML = `
+      <label class="radio" title="Pre-select this offer"><input type="radio" name="defaultOffer" ${o.isDefault ? 'checked' : ''} aria-label="Default offer"></label>
+      <input class="oname" placeholder="Name" maxlength="30" aria-label="Offer name">
+      <input class="ostart" type="number" min="1" max="300" required aria-label="First offer percent">
+      <input class="oend" type="number" min="1" max="300" required aria-label="Last offer percent">
+      <button type="button" class="btn small danger" ${bankOffers.length < 2 ? 'disabled' : ''} aria-label="Delete offer">✕</button>`;
+    // set via properties: names are user text, never via innerHTML
+    row.querySelector('.oname').value = o.name;
+    row.querySelector('.ostart').value = o.startPct;
+    row.querySelector('.oend').value = o.endPct;
+    row.querySelector('input[type=radio]').addEventListener('change', () => bankOffers.forEach((q, j) => (q.isDefault = j === i)));
+    row.querySelector('.oname').addEventListener('input', (e) => (o.name = e.target.value));
+    row.querySelector('.ostart').addEventListener('input', (e) => (o.startPct = e.target.value));
+    row.querySelector('.oend').addEventListener('input', (e) => (o.endPct = e.target.value));
+    row.querySelector('.danger').addEventListener('click', () => {
+      bankOffers.splice(i, 1);
+      if (!bankOffers.some((q) => q.isDefault)) bankOffers[0].isDefault = true;
+      renderBankOffers();
+      setDirty(true);
+    });
+    return row;
+  }));
+}
+
+$('addOffer').addEventListener('click', () => {
+  if (bankOffers.length >= 12) return toast('Up to 12 offers.', true);
+  const last = bankOffers.at(-1);
+  bankOffers.push({ name: `Offer ${bankOffers.length + 1}`, startPct: last?.startPct ?? 35, endPct: last?.endPct ?? 95, isDefault: false });
+  renderBankOffers();
+  setDirty(true);
+});
+
 $('addPreset').addEventListener('click', () => {
   const base = activeSchedule({ presets, activePreset: presets.find((p) => p.active)?.name });
   presets.push({ name: `Preset ${presets.length + 1}`, schedule: [...base], active: false });
@@ -273,7 +329,11 @@ function readForm() {
     prizes: parseNumberList(form.prizes.value),
     columns: form.columns.value,
     theme: { background: form.background.value, accent: form.accent.value, snow: form.snow.checked, lights: form.lights.checked, glints: form.glints.checked },
-    banker: { startPct: form.startPct.value, endPct: form.endPct.value, roundTo: form.roundTo.value },
+    banker: {
+      offers: bankOffers.map(({ name, startPct, endPct }) => ({ name: name.trim(), startPct, endPct })),
+      defaultOffer: bankOffers.find((o) => o.isDefault)?.name.trim(),
+      roundTo: form.roundTo.value,
+    },
     presets: presets.map(({ name, schedule }) => ({ name: name.trim(), schedule })),
     activePreset: presets.find((p) => p.active)?.name.trim(),
   };

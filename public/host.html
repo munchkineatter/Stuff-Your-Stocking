@@ -44,8 +44,9 @@
       <aside class="side">
         <div class="panel" id="offerPanel" hidden>
           <h2>Banker's offer</h2>
-          <p class="muted">Suggested <strong id="suggested"></strong> · Avg left <span id="ev"></span></p>
-          <label class="offer-input">$ <input id="offerAmount" type="number" min="0" step="100" inputmode="numeric"></label>
+          <p class="muted">Average left <strong id="ev"></strong> · pick an offer or type your own</p>
+          <div class="offer-options" id="offerOptions" role="radiogroup" aria-label="Offer variations"></div>
+          <label class="offer-input">$ <input id="offerAmount" type="number" min="0" step="100" inputmode="numeric" aria-label="Offer amount"></label>
           <div class="row">
             <button class="btn deal" id="dealBtn">DEAL</button>
             <button class="btn nodeal" id="noDealBtn">NO DEAL</button>
@@ -107,11 +108,12 @@
 
       <fieldset>
         <legend>Banker</legend>
-        <p class="muted">Offer = average of remaining prizes × a percentage that rises from the first offer to the last.</p>
-        <div class="grid3">
-          <label>First offer % <input name="startPct" type="number" min="1" max="200" required></label>
-          <label>Last offer % <input name="endPct" type="number" min="1" max="200" required></label>
-          <label>Round to $ <input name="roundTo" type="number" min="1" required></label>
+        <p class="muted">When the banker calls, the host sees one amount per offer below and picks which to make. Each amount = average of the remaining prizes × a percentage that rises from <b>First %</b> (first offer) to <b>Last %</b> (final offer). The <b>Default</b> offer is pre-selected.</p>
+        <div class="bank-offers" id="bankOffers"></div>
+        <div class="row">
+          <button type="button" class="btn small" id="addOffer">+ Add offer</button>
+          <span class="spacer"></span>
+          <label class="inline">Round to $ <input name="roundTo" type="number" min="1" required></label>
         </div>
       </fieldset>
 

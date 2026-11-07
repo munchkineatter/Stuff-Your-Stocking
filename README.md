@@ -15,7 +15,7 @@ The host and the board can be on different devices, for example the host on a ph
 2. Open `/host` on the host device and enter the PIN.
 3. Press **New game**. The cases are shuffled using a cryptographically secure random number generator.
 4. Tap the contestant's case, then tap the cases they choose to open. The banner tells you how many are left this round.
-5. When the round ends, the banker panel shows a suggested offer. You can type over it, then press **DEAL** or **NO DEAL**.
+5. When the round ends, the banker panel shows one amount for each offer variation, for example Lowball, Fair and Generous, with the default already selected. Tap a different one or type your own amount, then press **DEAL** or **NO DEAL**. The offer history records which variation was made, or "custom".
 6. With two cases left, choose **Keep** or **Swap**.
 
 **Undo** (or the **U** key) reverses the last step, which helps after a mis-tap. **Show contents** reveals every case to the host only. The audience board never receives which case holds which prize, so it can't leak through the display's browser.
@@ -23,11 +23,11 @@ The host and the board can be on different devices, for example the host on a ph
 ## Settings (host page → Settings tab)
 
 - **Board:** title, prize values (any number from 2 to 100), number of columns, colors, and three effects you can switch on or off: falling snow (three depth layers), string lights around the edges, and sparkle glints on the remaining prizes. Eliminated prizes always get a candy-cane strike that draws itself across the value.
-- **Banker:** the offer is the average of the remaining prizes times a percentage. The percentage rises from *First offer %* to *Last offer %* across the game and is rounded to *Round to $*.
+- **Banker:** a list of offer variations (up to 12). Each has a name, a *First %* and a *Last %*. Its amount is the average of the remaining prizes times a percentage that rises from First % at the first offer to Last % at the final one, rounded to *Round to $*. The one marked *Default* is pre-selected when the banker calls. It starts with Lowball (25→70%), Fair (35→95%) and Generous (50→110%).
 - **Round presets:** saved schedules of how many cases to open each round. The default is `6, 5, 4, 3, 2, 1, 1`. A schedule automatically adapts to however many cases there are and always ends on a final two. Each preset shows a preview, for example *With 20 cases: 6 → 5 → 4 → 3 then final two*.
 - **Export / Import:** back up your settings as a JSON file, or move them to another server.
 
-Prize and preset changes take effect at the next **New game**. Look and banker changes apply immediately.
+Prize and preset changes take effect at the next **New game**. Look and banker changes apply immediately, including to an offer already on screen.
 
 ## Running locally
 
